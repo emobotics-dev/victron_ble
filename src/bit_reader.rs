@@ -18,6 +18,7 @@ impl<'a> BitReader<'a> {
         Self { cursor: 0, data }
     }
 
+    #[link_section = ".iram1"]
     pub fn read_unsigned_int(&mut self, num_bits: usize) -> Result<u64> {
         let mut value = 0u64;
         for position in 0..num_bits {
@@ -26,6 +27,7 @@ impl<'a> BitReader<'a> {
         Ok(value)
     }
 
+    #[link_section = ".iram1"]
     pub fn read_signed_int(&mut self, num_bits: usize) -> Result<i64> {
         let mut value = 0i64;
         for position in 0..num_bits - 1 {
@@ -37,11 +39,13 @@ impl<'a> BitReader<'a> {
         Ok(value)
     }
 
+    #[link_section = ".iram1"]
     pub fn skip(&mut self, num_bits: usize) -> Result<()> {
         self.read_unsigned_int(num_bits)?;
         Ok(())
     }
 
+    #[link_section = ".iram1"]
     fn read_bit(&mut self) -> Result<bool> {
         if self.cursor == self.data.len() * 8 {
             return Err(Error::DataTooShort);
