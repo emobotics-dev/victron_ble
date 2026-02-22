@@ -41,6 +41,11 @@ impl<'d, 'k> Record<'d, 'k> {
             encryption_key,
         };
 
+        if record.data.len() <= 9 || record.data.len() > 24 {
+            // would cause out-of-bounds access if decrypted
+            return Err(Error::WrongAdvertisement);
+        }
+
         if !record.is_victron_extra_manufacturer_data() {
             return Err(Error::WrongAdvertisement);
         }
