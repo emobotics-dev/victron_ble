@@ -34,6 +34,7 @@ pub(crate) struct Record<'d, 'k> {
 /// 7     | ?     | The first byte of the decryption key. Used to validate the given decryption key.
 /// 8..   | ?     | Payload encrypted using AES128 in CTR mode with the given IV.
 impl<'d, 'k> Record<'d, 'k> {
+    #[link_section = ".iram1"]
     pub(crate) fn new(data: &'d [u8], encryption_key: &'k [u8]) -> Result<Self> {
         let record = Self {
             data,
@@ -51,6 +52,7 @@ impl<'d, 'k> Record<'d, 'k> {
         Ok(record)
     }
 
+    #[inline(always)]
     pub(crate) fn decrypt(&self) -> Result<[u8; 16]> {
         let mut algo = EncryptionAlgorithm::new(self.encryption_key.into(), &self.iv().into());
 
@@ -61,14 +63,17 @@ impl<'d, 'k> Record<'d, 'k> {
         Ok(data)
     }
 
+    #[inline(always)]
     pub(crate) fn record_type(&self) -> u8 {
         self.data[4]
     }
 
+    #[inline(always)]
     fn is_victron_extra_manufacturer_data(&self) -> bool {
         self.data[0] == MANUFACTURER_DATA_RECORD_TYPE
     }
 
+    #[inline(always)]
     fn iv(&self) -> [u8; 16] {
         [
             self.data[5],
@@ -90,10 +95,12 @@ impl<'d, 'k> Record<'d, 'k> {
         ]
     }
 
+    #[inline(always)]
     fn is_correct_encryption_key(&self) -> bool {
         self.data[7] == self.encryption_key[0]
     }
 
+    #[inline(always)]
     fn cipher(&self) -> [u8; 16] {
         let data = &self.data[8..];
         let data_len = data.len();
