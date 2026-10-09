@@ -1,4 +1,3 @@
-use aes::cipher::StreamCipherError;
 use num_enum::TryFromPrimitiveError;
 use thiserror::Error;
 
@@ -20,8 +19,6 @@ pub enum Error {
     BluetoothEventStreamClosed,
     #[error("The data does not represent a Victron Manufacturer Data record. Victron devices emit multiple types of advertisement data so keep listening.")]
     WrongAdvertisement,
-    #[error("The data could not be decrypted: {0}")]
-    DecryptionFailed(StreamCipherError),
     #[error("Incorrect device encryption key. The Device encryption key provided is not correct for this device.")]
     IncorrectDeviceEncryptionKey,
     #[error(
@@ -61,12 +58,6 @@ impl From<bluest::Error> for Error {
 impl From<bluer::Error> for Error {
     fn from(e: bluer::Error) -> Self {
         Error::Bluetooth(e)
-    }
-}
-
-impl From<StreamCipherError> for Error {
-    fn from(e: StreamCipherError) -> Self {
-        Error::DecryptionFailed(e)
     }
 }
 

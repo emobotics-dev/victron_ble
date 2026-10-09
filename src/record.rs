@@ -1,6 +1,4 @@
 use crate::err::*;
-use aes::cipher::StreamCipher;
-use ctr::cipher::KeyIvInit;
 
 #[cfg(feature = "test-record")]
 pub(crate) const RECORD_TYPE_TEST_RECORD: u8 = 0x00;
@@ -17,7 +15,6 @@ pub(crate) const RECORD_TYPE_VE_BUS: u8 = 0x0C;
 
 const MANUFACTURER_DATA_RECORD_TYPE: u8 = 0x10;
 
-type EncryptionAlgorithm = ctr::Ctr128LE<aes::Aes128>;
 
 pub(crate) struct Record<'d, 'k> {
     data: &'d [u8],
@@ -62,18 +59,29 @@ impl<'d, 'k> Record<'d, 'k> {
         Ok(record)
     }
 
-    // `inline` rather than `inline(always)`: there is one call site now, so
-    // LLVM inlines it anyway, and forcing it meant a caller that places itself
-    // in IRAM silently dragged the whole AES-CTR path in with it -- 9.3 KiB of
-    // internal RAM in alternator-regulator, which is what found this.
+    /// CTR over exactly one block: keystream `E_k(IV)`, XORed over the
+    /// payload. The cipher comes from the caller
+    /// ([`crate::Aes128Encrypt`]) so a host can use an accelerator.
+    ///
+    /// `inline` rather than `inline(always)`: forcing it meant a caller that
+    /// places itself in IRAM dragged the whole cipher in with it -- 9.3 KiB of
+    /// internal RAM in alternator-regulator, which is what found this.
     #[inline]
-    pub(crate) fn decrypt(&self) -> Result<[u8; 16]> {
-        let mut algo = EncryptionAlgorithm::new(self.encryption_key.into(), &self.iv().into());
+    pub(crate) fn decrypt_with<A: crate::Aes128Encrypt>(&self, aes: &mut A) -> Result<[u8; 16]> {
+        let mut key = [0u8; 16];
+        let Some(given) = self.encryption_key.get(..16) else {
+            return Err(Error::IncorrectDeviceEncryptionKey);
+        };
+        key.copy_from_slice(given);
+
+        let mut keystream = self.iv();
+        aes.encrypt_block(&key, &mut keystream);
 
         let cipher = self.cipher();
-        let mut data = [0; 16];
-        algo.apply_keystream_b2b(&cipher, &mut data)?;
-
+        let mut data = [0u8; 16];
+        for (out, (c, k)) in data.iter_mut().zip(cipher.iter().zip(keystream.iter())) {
+            *out = c ^ k;
+        }
         Ok(data)
     }
 
@@ -140,6 +148,11 @@ mod test {
             17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
         ];
         let iv = [33, 34, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        // The reference implementation, kept as a dev-dependency: building the
+        // fixture with this crate's own XOR would make the test tautological.
+        type EncryptionAlgorithm = ctr::Ctr128LE<aes::Aes128>;
+        use aes::cipher::StreamCipher;
+        use ctr::cipher::KeyIvInit;
         let mut algo = EncryptionAlgorithm::new(key.as_slice().into(), &iv.into());
         let mut cipher = [0; 16];
         algo.apply_keystream_b2b(&plaintext, &mut cipher).unwrap();
@@ -173,7 +186,7 @@ mod test {
             cipher[15],
         ];
         let record = Record::new(&manufacturer_data, &key).unwrap();
-        let decrypted = record.decrypt().unwrap();
+        let decrypted = record.decrypt_with(&mut crate::SoftAes).unwrap();
         assert_eq!(decrypted, plaintext);
     }
 }
