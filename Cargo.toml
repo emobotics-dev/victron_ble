@@ -30,6 +30,24 @@ bluest = { version = "0.6.9", optional = true }
 hex = "0.4"
 
 [features]
-default = ["bluetooth"]
+default = ["bluetooth", "all-devices"]
+# Device types compile per feature: the decrypted 16 bytes are a DIFFERENT
+# bitfield per record type, so every supported type carries its own decoder,
+# and the type byte is runtime data -- nothing can be dropped by LTO. A host
+# that reads one kind of device should not pay for six (4.8 KiB on xtensa).
+all-devices = [
+    "battery-monitor",
+    "ac-charger",
+    "solar-charger",
+    "inverter",
+    "ve-bus",
+    "test-record",
+]
+battery-monitor = []
+ac-charger = []
+solar-charger = []
+inverter = []
+ve-bus = []
+test-record = []
 serde = ["dep:serde", "bitflags/serde"]
 bluetooth = ["dep:bluer", "dep:bluest", "dep:tokio", "dep:tokio-stream"]

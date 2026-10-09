@@ -2,11 +2,17 @@ use crate::err::*;
 use aes::cipher::StreamCipher;
 use ctr::cipher::KeyIvInit;
 
+#[cfg(feature = "test-record")]
 pub(crate) const RECORD_TYPE_TEST_RECORD: u8 = 0x00;
+#[cfg(feature = "solar-charger")]
 pub(crate) const RECORD_TYPE_SOLAR_CHARGER: u8 = 0x01;
+#[cfg(feature = "battery-monitor")]
 pub(crate) const RECORD_TYPE_BATTERY_MONITOR: u8 = 0x02;
+#[cfg(feature = "inverter")]
 pub(crate) const RECORD_TYPE_INVERTER: u8 = 0x03;
+#[cfg(feature = "ac-charger")]
 pub(crate) const RECORD_TYPE_AC_CHARGER: u8 = 0x08;
+#[cfg(feature = "ve-bus")]
 pub(crate) const RECORD_TYPE_VE_BUS: u8 = 0x0C;
 
 const MANUFACTURER_DATA_RECORD_TYPE: u8 = 0x10;
@@ -34,7 +40,6 @@ pub(crate) struct Record<'d, 'k> {
 /// 7     | ?     | The first byte of the decryption key. Used to validate the given decryption key.
 /// 8..   | ?     | Payload encrypted using AES128 in CTR mode with the given IV.
 impl<'d, 'k> Record<'d, 'k> {
-    #[link_section = ".iram1"]
     pub(crate) fn new(data: &'d [u8], encryption_key: &'k [u8]) -> Result<Self> {
         let record = Self {
             data,
@@ -57,7 +62,11 @@ impl<'d, 'k> Record<'d, 'k> {
         Ok(record)
     }
 
-    #[inline(always)]
+    // `inline` rather than `inline(always)`: there is one call site now, so
+    // LLVM inlines it anyway, and forcing it meant a caller that places itself
+    // in IRAM silently dragged the whole AES-CTR path in with it -- 9.3 KiB of
+    // internal RAM in alternator-regulator, which is what found this.
+    #[inline]
     pub(crate) fn decrypt(&self) -> Result<[u8; 16]> {
         let mut algo = EncryptionAlgorithm::new(self.encryption_key.into(), &self.iv().into());
 
@@ -140,7 +149,9 @@ mod test {
             0x00,
             0x00,
             0x00,
-            RECORD_TYPE_TEST_RECORD,
+            // Literal, not `RECORD_TYPE_TEST_RECORD`: this test is about
+            // decryption, so it must run whichever decoders are enabled.
+            0x00,
             iv[0],
             iv[1],
             key[0],
